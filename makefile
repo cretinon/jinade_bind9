@@ -44,7 +44,7 @@ BUILDFLAGS := --rm --force-rm --compress -f $(CURDIR)/$(ARCH)/$(DISTRIB)/Dockerf
 	--label org.label-schema.vendor=$(DOCKER_USER)
 
 MOUNTFLAGS := -v /mnt/nfs/DebianShare/bind9:/data
-OTHERFLAGS := --network gluster-net --privileged 
+OTHERFLAGS := --network bind-net --ip=10.2.1.11 --privileged 
 PORTFLAGS  := -p 53:53/udp
 CACHEFLAGS := # --no-cache=true --pull
 NAMEFLAGS  := --name $(OPSYS)_$(CNTNAME) --hostname $(CNTNAME)
@@ -54,8 +54,8 @@ RUNFLAGS   := -e PGID=$(PGID) -e PUID=$(PUID)
 
 
 # {{{ -- docker run args
-
-CONTARGS    := -j -v -c -d cretinon.intranet -m --ns1 swarmMaster --ipns1 192.168.2.187 -r
+#sample master     -j -v -c -d cretinon.intranet -m --ns1 swarmMaster --ipns1 192.168.2.187 -r
+CONTARGS    := -j -v -c -d cretinon.intranet -s -r
 
 # -- }}}
 
@@ -83,7 +83,9 @@ rm : stop
 	docker rm -f $(OPSYS)_$(CNTNAME)
 
 start :
+	if docker network ls | grep bind-net ; then echo "no creation" ; else docker network create -d overlay bind-net --attachable --subnet=10.2.1.0/24; fi
 	docker run -d $(NAMEFLAGS) $(RUNFLAGS) $(PORTFLAGS) $(MOUNTFLAGS) $(OTHERFLAGS) $(IMAGETAG) $(CONTARGS)
+	docker network connect gluster-net jinade_bind9
 	docker network connect bridge jinade_bind9
 
 rshell :

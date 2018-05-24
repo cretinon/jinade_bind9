@@ -76,12 +76,14 @@ _db_domain () {
     _start_debug ${FUNCNAME[0]} $*
     
     if _isnotdefined $DOMAIN ; then _usage ${FUNCNAME[0]} ; return 1; fi
-    if _arenotbothdefined $NS1 $IPNS1 ; then _usage ${FUNCNAME[0]} ; return 1; fi
 
     DST_db_domain="/etc/bind/db."$DOMAIN
 
-    if _filenotexist $DST_db_domain ; then
-	cat << EOF > $DST_db_domain
+    if _isdefined $MASTER ; then
+	if _arenotbothdefined $NS1 $IPNS1 ; then _usage ${FUNCNAME[0]} ; return 1; fi
+	
+	if _filenotexist $DST_db_domain ; then
+	    cat << EOF > $DST_db_domain
 \$TTL    3600
 @       IN      SOA     $NS1.$DOMAIN. admin.$DOMAIN. (
                 1                    ; Serial
@@ -95,9 +97,10 @@ _db_domain () {
 $NS1    IN      A          $IPNS1
 EOF
 
-	chown root:bind /etc/bind
-	chmod 775 /etc/bind
-	chown root:bind $DST_db_domain
+	    chown root:bind /etc/bind
+	    chmod 775 /etc/bind
+	    chown root:bind $DST_db_domain
+	fi
     fi
     
     _end_debug ${FUNCNAME[0]} $*
@@ -108,27 +111,30 @@ _dnssec_create_key () {
     
     if _isnotdefined $DOMAIN ; then _usage ${FUNCNAME[0]} ; return 1; fi
 
-    ls $WORKDIR/Kadmin*.key 2> /dev/null
-    RETURN=$?
-
-    if [ $RETURN -eq 0 ]; then
-	cd $WORKDIR
-	KEY_NAME=$(ls Kadmin*.key)
-	KEY_NAME=$(echo $KEY_NAME | sed -e 's/.key//g')
-	cd -
-	echo "WARNING Key already exist $KEY_NAME"
-    else
-	cd $WORKDIR/
-	KEY_NAME=$(dnssec-keygen -a HMAC-SHA512 -b 512 -n USER admin.$DOMAIN)
-	echo $KEY_NAME
-	cd -
-    fi
-
-    SECRET=$(cat $WORKDIR/$KEY_NAME.private | grep Key | awk '{print $2}')
-    NAMED_CONF_KEY="key admin.$DOMAIN {
+    if _isdefined $MASTER ; then
+	ls $WORKDIR/Kadmin*.key 2> /dev/null
+	RETURN=$?
+	
+	if [ $RETURN -eq 0 ]; then
+	    cd $WORKDIR
+	    KEY_NAME=$(ls Kadmin*.key)
+	    KEY_NAME=$(echo $KEY_NAME | sed -e 's/.key//g')
+	    cd -
+	    echo "WARNING Key already exist $KEY_NAME"
+	else
+	    cd $WORKDIR/
+	    KEY_NAME=$(dnssec-keygen -a HMAC-SHA512 -b 512 -n USER admin.$DOMAIN)
+	    echo $KEY_NAME
+	    cd -
+	fi
+	
+	SECRET=$(cat $WORKDIR/$KEY_NAME.private | grep Key | awk '{print $2}')
+	NAMED_CONF_KEY="key admin.$DOMAIN {
     algorithm HMAC-SHA512;
     secret \"$SECRET\";
 };"
+    fi
+    
     _end_debug ${FUNCNAME[0]} $*
 }
 
@@ -146,7 +152,7 @@ include "/etc/bind/named.conf.log";
 zone "$DOMAIN" {
         type master;
         file "/etc/bind/db.$DOMAIN";
-        $ALLOW_TRANSFERT
+        allow-transfer {10.2.1.11;};
         update-policy  { grant admin.$DOMAIN zonesub TXT; };
 };
 $NAMED_CONF_KEY
@@ -154,8 +160,15 @@ EOF
     fi
 
     if _isdefined $SLAVE ; then
-	# Todo case slave
-	echo toto
+	cat <<EOF > $DST_named_conf_local
+include "/etc/bind/zones.rfc1918";
+include "/etc/bind/named.conf.log";
+zone "$DOMAIN" {
+        type slave;
+        file "/etc/bind/db.$DOMAIN";
+        masters {10.2.1.10;};
+};
+EOF
     fi
     
     chown root:bind $DST_named_conf_local
@@ -385,6 +398,8 @@ _process () {
 }
 
 main() {
+    #have to wait gluster-net attached to this container before anything else
+    sleep 5
     _start_debug ${FUNCNAME[0]} $*
     
     [ -z "$1" ] && _usage && return
