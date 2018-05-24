@@ -44,7 +44,7 @@ BUILDFLAGS := --rm --force-rm --compress -f $(CURDIR)/$(ARCH)/$(DISTRIB)/Dockerf
 	--label org.label-schema.vendor=$(DOCKER_USER)
 
 MOUNTFLAGS := -v /mnt/nfs/DebianShare/bind9:/data
-OTHERFLAGS := #
+OTHERFLAGS := --network gluster-net --privileged 
 PORTFLAGS  := -p 53:53/udp
 CACHEFLAGS := # --no-cache=true --pull
 NAMEFLAGS  := --name $(OPSYS)_$(CNTNAME) --hostname $(CNTNAME)
@@ -55,7 +55,7 @@ RUNFLAGS   := -e PGID=$(PGID) -e PUID=$(PUID)
 
 # {{{ -- docker run args
 
-CONTARGS    := #
+CONTARGS    := -j -v -c -d cretinon.intranet -m --ns1 swarmMaster --ipns1 192.168.2.187 -r
 
 # -- }}}
 
@@ -84,9 +84,14 @@ rm : stop
 
 start :
 	docker run -d $(NAMEFLAGS) $(RUNFLAGS) $(PORTFLAGS) $(MOUNTFLAGS) $(OTHERFLAGS) $(IMAGETAG) $(CONTARGS)
+	docker network connect bridge jinade_bind9
 
 rshell :
 	docker exec -u root -it $(OPSYS)_$(CNTNAME) $(SHCOMMAND)
+
+#make ARCH=x86_64 DISTRIB=debian EXECCOMMAND="/bin/bash -c '/usr/local/entrypoint.sh _test'"  eshell
+eshell :
+	docker exec -u root -it $(OPSYS)_$(CNTNAME) $(EXECCOMMAND)
 
 shell :
 	docker run --rm -it $(NAMEFLAGS) $(RUNFLAGS) $(PORTFLAGS) $(MOUNTFLAGS) $(OTHERFLAGS) $(IMAGETAG) $(SHCOMMAND)
