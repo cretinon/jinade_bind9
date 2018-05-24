@@ -19,7 +19,7 @@ before_script:
 - docker --version
 - make --version
 script:
-  - make ARCH=${ARCH} DISTRIB=${DISTRIB} build test
+  - make ARCH=${ARCH} DISTRIB=${DISTRIB} build
 after_success:
 - docker login -u ${DOCKER_USER} -p ${DOCKER_PASS}
 - make ARCH=${ARCH} DISTRIB=${DISTRIB} push
