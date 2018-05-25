@@ -44,7 +44,7 @@ BUILDFLAGS := --rm --force-rm --compress -f $(CURDIR)/$(ARCH)/$(DISTRIB)/Dockerf
 	--label org.label-schema.vendor=$(DOCKER_USER)
 
 MOUNTFLAGS := -v /mnt/nfs/DebianShare/bind9:/data
-OTHERFLAGS := --network bind-net --ip=10.2.1.11 --privileged 
+OTHERFLAGS := --network bind-net --ip=$(IP) --privileged 
 PORTFLAGS  := -p 53:53/udp
 CACHEFLAGS := # --no-cache=true --pull
 NAMEFLAGS  := --name $(OPSYS)_$(CNTNAME) --hostname $(CNTNAME)
@@ -54,8 +54,11 @@ RUNFLAGS   := -e PGID=$(PGID) -e PUID=$(PUID)
 
 
 # {{{ -- docker run args
-#sample master     -j -v -c -d cretinon.intranet -m --ns1 swarmMaster --ipns1 192.168.2.187 -r
-CONTARGS    := -j -v -c -d cretinon.intranet -s -r
+#sample master     -j -v -c -d jinade.me -m --ns1 jinade1 --ipns1 217.182.142.201 -r
+ifeq "$(origin CONTARGS)" "undefined"
+CONTARGS    := -j -v -c -d jinade.me -s -r
+endif
+
 
 # -- }}}
 
