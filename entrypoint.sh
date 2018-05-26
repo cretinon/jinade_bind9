@@ -84,11 +84,14 @@ _set_env () {
     GLUSTER_MOUNT="/mnt/gluster/"
     GLUSTER_SRC="$GLUSTER_IP1:/datastore"
 
-    BIND_DIR="$ROOTFS/etc/bind"
-    DATA_DIR="$ROOTFS/data"
+    if _isdefined $MASTER ; then BIND_DIR="$ROOTFS/etc/bind/master" ; fi
+    if _isdefined $SLAVE ; then BIND_DIR="$ROOTFS/etc/bind/slave" ; fi
+
     if _isdefined $MASTER ; then LOG_DIR="$ROOTFS/var/log/bind/master" ; fi
     if _isdefined $SLAVE ; then LOG_DIR="$ROOTFS/var/log/bind/slave" ; fi
 
+    DATA_DIR="$ROOTFS/data"
+    
     BIND_MASTER_IP="10.2.1.10"
     BIND_SLAVE_IP="10.2.1.11"
 
