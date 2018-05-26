@@ -56,7 +56,7 @@ RUNFLAGS   := -e PGID=$(PGID) -e PUID=$(PUID)
 # {{{ -- docker run args
 #sample master     -j -v -c -d jinade.me -m --ns1 jinade1 --ipns1 217.182.142.201 -r
 ifeq "$(origin CONTARGS)" "undefined"
-CONTARGS    := -j -v -c -d jinade.me -s -r
+CONTARGS    := -j -v -r
 endif
 
 
