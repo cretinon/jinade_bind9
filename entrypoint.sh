@@ -12,7 +12,16 @@ _usage () {
     case $1 in
 	_db_domain | _named_conf_local | _dnssec_create_key)
 	    echo "./`basename $0`" "-c -d domain.net -m/-s (master/slave) --ns1 ns1_hostname --ipns1 a.b.c.d"
-	;;
+	    ;;
+	domain)
+	    echo "domain not defined"
+	    ;;
+	master_or_slave)
+	    echo "need master -m or slave -s"
+	    ;;
+	master_and_slave)
+	    echo "cant have both master -m and slave -s "
+	    ;;
 	*)
 	    echo "create new bind config files : ./`basename $0`" "-c -d domain.net -m/-s (master/slave) --ns1 ns1_hostname --ipns1 a.b.c.d"
 	    echo "run                          : ./`basename $0`" "-r"
@@ -63,9 +72,9 @@ _filenotexist () {
 }
 
 _set_env () {
-    if _isnotdefined $DOMAIN ; then _usage ${FUNCNAME[0]} ; return 1; fi
-    if _notatleastonedefined $MASTER $SLAVE ; then _usage ${FUNCNAME[0]} ; return 1; fi
-    if _isbothdefined $MASTER $SLAVE ; then _usage ${FUNCNAME[0]} ; return 1; fi
+    if _isnotdefined $DOMAIN ; then _usage "domain" ; return 1; fi
+    if _notatleastonedefined $MASTER $SLAVE ; then _usage "master_or_slave" ; return 1; fi
+    if _isbothdefined $MASTER $SLAVE ; then _usage "master_and_slave" ; return 1; fi
 
     GLUSTER_HOST1="gluster-1"
     GLUSTER_IP1="10.2.0.10"
@@ -75,23 +84,23 @@ _set_env () {
     GLUSTER_MOUNT="/mnt/gluster/"
     GLUSTER_SRC="$GLUSTER_IP1:/datastore"
 
-    BIND_DIR="$ROOTFS/etc/bind/"
+    BIND_DIR="$ROOTFS/etc/bind"
     DATA_DIR="$ROOTFS/data"
-    if _isdefined $MASTER ; then LOG_DIR="$ROOTFS/var/log/bind/master/" ; fi
-    if _isdefined $SLAVE ; then LOG_DIR="$ROOTFS/var/log/bind/slave/" ; fi
+    if _isdefined $MASTER ; then LOG_DIR="$ROOTFS/var/log/bind/master" ; fi
+    if _isdefined $SLAVE ; then LOG_DIR="$ROOTFS/var/log/bind/slave" ; fi
 
     BIND_MASTER_IP="10.2.1.10"
     BIND_SLAVE_IP="10.2.1.11"
 
     DST_db_domain="$BIND_DIR/db."$DOMAIN
     
+    DST_named_conf="$BIND_DIR/named.conf"
     DST_named_conf_local="$BIND_DIR/named.conf.local"
     DST_named_conf_log="$BIND_DIR/named.conf.log"
 }
 
 _init_jinade () {
-    ROOTFS="/mnt/gluster/bind"
-    _set_env
+    if _isnotdefined $GLUSTER_IP1 ; then _usage ${FUNCNAME[0]} ; exit 1; fi
 
     echo "$GLUSTER_IP1 $GLUSTER_HOST1" >> /etc/hosts
     echo "$GLUSTER_IP2 $GLUSTER_HOST2" >> /etc/hosts
@@ -100,6 +109,7 @@ _init_jinade () {
     mount -t glusterfs $GLUSTER_SRC $GLUSTER_MOUNT
 
     mkdir -p $BIND_DIR
+    mkdir -p $DATA_DIR
 }
 
 _db_domain () {
@@ -167,10 +177,26 @@ _dnssec_create_key () {
     _end_debug ${FUNCNAME[0]} $*
 }
 
+_named_conf () {
+    _start_debug ${FUNCNAME[0]} $*
+
+    if _notatleastonedefined $MASTER $SLAVE ; then _usage ${FUNCNAME[0]} ; return 1; fi
+    if _isbothdefined $MASTER $SLAVE ; then _usage ${FUNCNAME[0]} ; return 1; fi
+
+    cat <<EOF > $DST_named_conf
+include "/etc/bind/named.conf.options";
+include "$BIND_DIR/named.conf.local";
+include "/etc/bind/named.conf.default-zones";
+EOF
+    
+    chown root:bind $DST_named_conf
+    
+    _end_debug ${FUNCNAME[0]} $*
+}
+
 _named_conf_local () {
     _start_debug ${FUNCNAME[0]} $*
     
-    # Todo Allow transfert
     if _notatleastonedefined $MASTER $SLAVE ; then _usage ${FUNCNAME[0]} ; return 1; fi
     if _isbothdefined $MASTER $SLAVE ; then _usage ${FUNCNAME[0]} ; return 1; fi
 
@@ -407,7 +433,7 @@ _process () {
 		shift 2
 		;;
 	    -j)
-		_init_jinade
+		JINADE="yes"
 		shift
 		;;
 
@@ -441,14 +467,23 @@ main() {
     if _startswith "$1" '-'; then
 	_process "$@"
 
+	if _isdefined $JINADE ; then
+	    ROOTFS="/mnt/gluster/bind"
+	    _set_env
+	    _init_jinade
+	fi
+		
 	if _isdefined $CREATE ; then
+	    _set_env
 	    _db_domain \
 		&& _dnssec_create_key \
+		&& _named_conf \
 		&& _named_conf_local \
 		&& _named_conf_log
 	fi
 
 	if _isdefined $UPDATE ; then
+	    _set_env
 	    case $TARGET in
 		A)
 		    _nsupdate_add_a
@@ -470,8 +505,8 @@ main() {
 	fi
 
 	if _isdefined $RUN ; then
-	    /usr/sbin/named -u bind
-	    tail -f /var/log/bind/*.log
+	    /usr/sbin/named -u bind -c $BIND_DIR/named.conf
+	    tail -f $LOG_DIR/*.log
 	fi
 	
     else
@@ -484,7 +519,7 @@ main() {
 # set initial values / do not edit, use args !
 VERBOSE=false
 ROOTFS=""
-_set_env
+
 
 # go !
 main "$@"
