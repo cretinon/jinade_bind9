@@ -22,6 +22,9 @@ _usage () {
 	master_and_slave)
 	    echo "cant have both master -m and slave -s "
 	    ;;
+	host_addr)
+	    echo "need host and addr"
+	    ;;
 	*)
 	    echo "create new bind config files : ./`basename $0`" "-c -d domain.net -m/-s (master/slave) --ns1 ns1_hostname --ipns1 a.b.c.d"
 	    echo "run                          : ./`basename $0`" "-r"
@@ -105,14 +108,21 @@ _set_env () {
 _init_jinade () {
     if _isnotdefined $GLUSTER_IP1 ; then _usage ${FUNCNAME[0]} ; exit 1; fi
 
-    echo "$GLUSTER_IP1 $GLUSTER_HOST1" >> /etc/hosts
-    echo "$GLUSTER_IP2 $GLUSTER_HOST2" >> /etc/hosts
-
-    mkdir -p $GLUSTER_MOUNT
-    mount -t glusterfs $GLUSTER_SRC $GLUSTER_MOUNT
-
-    mkdir -p $BIND_DIR
-    mkdir -p $DATA_DIR
+    ls $DATA_DIR/Kadmin*.key 2> /dev/null
+    RETURN=$?
+    
+    if [ $RETURN -eq 0 ]; then
+	if [ $VERBOSE = "true" ]; then echo "jinade env already monted" ; fi
+    else
+	echo "$GLUSTER_IP1 $GLUSTER_HOST1" >> /etc/hosts
+	echo "$GLUSTER_IP2 $GLUSTER_HOST2" >> /etc/hosts
+	
+	mkdir -p $GLUSTER_MOUNT
+	mount -t glusterfs $GLUSTER_SRC $GLUSTER_MOUNT
+	
+	mkdir -p $BIND_DIR
+	mkdir -p $DATA_DIR
+    fi
 }
 
 _db_domain () {
@@ -123,7 +133,7 @@ _db_domain () {
     if _isdefined $MASTER ; then
 	if _arenotbothdefined $NS1 $IPNS1 ; then _usage ${FUNCNAME[0]} ; return 1; fi
 	
-	if _filenotexist $DST_db_domain ; then
+#	if _filenotexist $DST_db_domain ; then
 	    cat << EOF > $DST_db_domain
 \$TTL    3600
 @       IN      SOA     $NS1.$DOMAIN. admin.$DOMAIN. (
@@ -138,7 +148,7 @@ _db_domain () {
 $NS1    IN      A          $IPNS1
 EOF
 
-	fi
+#	fi
     fi
 
     chown bind:bind $BIND_DIR
@@ -211,7 +221,8 @@ zone "$DOMAIN" {
         type master;
         file "$BIND_DIR/db.$DOMAIN";
         allow-transfer {$BIND_SLAVE_IP;};
-        update-policy  { grant admin.$DOMAIN zonesub TXT; };
+        allow-update {key admin.$DOMAIN;};
+        also-notify {$BIND_SLAVE_IP;};
 };
 $NAMED_CONF_KEY
 EOF
@@ -283,6 +294,9 @@ _nsupdate () {
     KEY_NAME=$(ls $DATA_DIR/Kadmin*.key)
     if _fileexist $KEY_NAME ; then
 	nsupdate -k $KEY_NAME $DATA_DIR/nsupdate.txt
+	rndc freeze $DOMAIN
+	rndc thaw $DOMAIN
+	rndc notify $DOMAIN
     else
 	echo "ERROR not KEY"
 	exit 1
@@ -295,14 +309,14 @@ _nsupdate () {
 _nsupdate_add_a () {
     _start_debug ${FUNCNAME[0]} $*
     
-    if _isnotdefined $DOMAIN ; then _usage; return 1; fi
-    if _arenotbothdefined $HOST $ADDR ; then _usage; return 1; fi
+    if _isnotdefined $DOMAIN ; then _usage "domain" ; return 1; fi
+    if _arenotbothdefined $HOST $ADDR ; then _usage "hist_addr" ; return 1; fi
 
+#    update delete $HOST A
     cat << EOF > $DATA_DIR/nsupdate.txt
 server 127.0.0.1
 zone $DOMAIN
-update delete $HOST A
-update add $HOST IN A $ADDR"
+update add $HOST. 3600 IN A $ADDR
 send
 quit 
 EOF
@@ -315,14 +329,15 @@ EOF
 _nsupdate_add_ns () {
     _start_debug ${FUNCNAME[0]} $*
     
-    if _isnotdefined $DOMAIN ; then _usage; return 1; fi
-    if _arenotbothdefined $HOST $ADDR ; then _usage; return 1; fi
+    if _isnotdefined $DOMAIN ; then _usage "domain" ; return 1; fi
+    if _arenotbothdefined $HOST $ADDR ; then _usage "host_addr" ; return 1; fi
 
+    #update delete $HOST IN NS
+    
     cat << EOF > $DATA_DIR/nsupdate.txt
 server 127.0.0.1
 zone $DOMAIN
-update delete $HOST NS
-update add $HOST IN NS $ADDR"
+update add $HOST. 3600 IN NS $ADDR.
 send
 quit 
 EOF
@@ -342,7 +357,7 @@ _nsupdate_add_cname () {
 server 127.0.0.1
 zone $DOMAIN
 update delete $CNAME
-update add $CNAME 600 IN      CNAME   $HOST"
+update add $CNAME 600 IN      CNAME   $HOST
 send
 quit 
 EOF

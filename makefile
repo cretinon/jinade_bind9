@@ -43,7 +43,7 @@ BUILDFLAGS := --rm --force-rm --compress -f $(CURDIR)/$(ARCH)/$(DISTRIB)/Dockerf
 	--label org.label-schema.vcs-url="https://github.com/$(GITHUB_USER)/$(OPSYS)_$(SVCNAME)" \
 	--label org.label-schema.vendor=$(DOCKER_USER)
 
-MOUNTFLAGS := -v /mnt/nfs/DebianShare/bind9:/data
+MOUNTFLAGS := -v /mnt/nfs/DebianShare/bind9:/datatmp
 OTHERFLAGS := --network bind-net --ip=$(IP) --privileged 
 PORTFLAGS  := -p 53:53/udp
 CACHEFLAGS := # --no-cache=true --pull
