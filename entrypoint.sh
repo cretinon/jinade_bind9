@@ -312,11 +312,11 @@ _nsupdate_add_a () {
     if _isnotdefined $DOMAIN ; then _usage "domain" ; return 1; fi
     if _arenotbothdefined $HOST $ADDR ; then _usage "hist_addr" ; return 1; fi
 
-#    update delete $HOST A
     cat << EOF > $DATA_DIR/nsupdate.txt
 server 127.0.0.1
 zone $DOMAIN
-update add $HOST. 3600 IN A $ADDR
+update delete $HOST         A
+update add    $HOST 3600 IN A $ADDR
 send
 quit 
 EOF
@@ -331,13 +331,31 @@ _nsupdate_add_ns () {
     
     if _isnotdefined $DOMAIN ; then _usage "domain" ; return 1; fi
     if _arenotbothdefined $HOST $ADDR ; then _usage "host_addr" ; return 1; fi
-
-    #update delete $HOST IN NS
     
     cat << EOF > $DATA_DIR/nsupdate.txt
 server 127.0.0.1
 zone $DOMAIN
-update add $HOST. 3600 IN NS $ADDR.
+update delete $HOST      IN NS 
+update add    $DOMAIN 3600 IN NS $HOST
+send
+quit 
+EOF
+
+    _nsupdate
+
+    _end_debug ${FUNCNAME[0]} $*
+}
+
+_nsupdate_add_mx () {
+    _start_debug ${FUNCNAME[0]} $*
+    
+    if _isnotdefined $DOMAIN ; then _usage "domain" ; return 1; fi
+    if _isnotdefined $HOST ; then _usage "host" ; return 1; fi
+    
+    cat << EOF > $DATA_DIR/nsupdate.txt
+server 127.0.0.1
+zone $DOMAIN
+update add    $DOMAIN 3600 MX 10 $HOST
 send
 quit 
 EOF
